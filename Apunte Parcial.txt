@@ -1,0 +1,295 @@
+	EXCEPCIONES
+
+public class BomberoOcupadoException : Exception
+{
+    public BomberoOcupadoException()
+    {
+    }
+
+    public BomberoOcupadoException(string mensaje) : base(mensaje)
+    {
+    }
+
+    public BomberoOcupadoException(string mensaje, Exception innerException) : base(mensaje, innerException)
+    {
+    }
+}
+
+public class BackLogException: Exception
+{
+    public BackLogException(string message):base(message) { }
+    public BackLogException(string message,Exception inner) : base(message,inner) { }
+}
+
+*******************************************************************************************************************
+	METODOS DE EXTENSION
+
+public static class ExtensoraRandom
+{
+    public static int GenerarRandom(this List<Serie> lista)
+    {
+        Random random = new Random();
+        if (lista.Count == 0)
+        {
+            return -1;
+        }
+        return (int)random.Next(0,lista.Count);
+    }
+}
+*******************************************************************************************************************
+
+	INTERFACES
+public interface IGuardar<T>
+{
+    void Guardar(T item, string ruta);
+}
+
+*******************************************************************************************************************
+
+	ARCHIVOS DE TEXTO
+
+public static class Logger
+{
+
+    public static void Log(string mensaje)
+    {
+        string rutaEscritorio = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        string pathCompleto = Path.Combine(rutaEscritorio, "Errores.txt");
+
+        try
+        {
+            StringBuilder stringBuilder = new StringBuilder();
+            stringBuilder.Append($"{DateTime.Now.ToString()} |"+mensaje);
+            if (!Directory.Exists(rutaEscritorio))
+            {
+                Directory.CreateDirectory(rutaEscritorio);
+            }
+            using (StreamWriter sw = new StreamWriter(pathCompleto,true))
+            {
+                //File.WriteAllText(pathAux, texto);
+                StringBuilder sb = new StringBuilder();
+                sw.WriteLine(stringBuilder.ToString());
+            }
+        }
+        catch (Exception)
+        {
+            BackLogException exception = new BackLogException($"Error en el archivo {pathCompleto}");
+            Logger.Log(exception.Message);
+            throw exception;
+        }
+    }
+}
+
+*******************************************************************************************************************
+
+	HILOS Y EVENTOS
+
+public delegate void DelegadoBacklog(Serie serie);
+
+public class ManejadorBacklog
+{
+    public event DelegadoBacklog NuevaSerieParaVer; 
+
+    public void IniciarManejador(List<Serie> series, CancellationTokenSource cancellationTokenSource)
+    {
+        Task.Run(() => MoverSeries(series), cancellationTokenSource.Token);
+    }
+
+    private void MoverSeries(List<Serie> series)
+    {
+        do
+        {
+            int index = series.GenerarRandom();
+            if (index == -1)
+            {
+                break;
+            }else
+            {
+                AccesoDatos.ActulizarSerie(series[index]);
+                Task.Delay(1500).Wait();
+                if (NuevaSerieParaVer != null)
+                {
+                    NuevaSerieParaVer.Invoke(series[index]);
+                }         
+            }
+        } while (true);
+    }
+}
+
+
+*******************************************************************************************************************
+
+	InvoqueRequired
+
+private void OcultarBombero(int bomberoIndex)
+{
+    // Verificar si se necesita invocación
+    if (InvokeRequired)
+    {
+        // Crear un delegado que apunta al método actual
+        Action<int> ocultarBombero = OcultarBombero;
+        
+        // Invocar el método en el hilo de la UI
+        Invoke(ocultarBombero, bomberoIndex);
+    }
+    else
+    {
+        // Modificar el control de la UI directamente si ya estamos en el hilo de la UI
+        fuegos[bomberoIndex].Visible = false;
+    }
+}
+
+	//Otro ejemplo de InvokeRequiered
+
+private void ActualizarListBox(ListBox lb, List<Serie> series)
+{
+    if (InvokeRequired)
+    {
+        Action<ListBox, List<Serie>> actualizarListBox = ActualizarListBox; //Ambas alternativas son válidas
+	Invoke(actualizarListBox, lb, series);
+
+        //object[] parametros = new object[] {lb, series};
+        //Invoke(ActualizarListBox, parametros); // Invoke debe recibir un Action como parámetro
+
+    }else
+    {
+        lb.DataSource = null;
+        lb.DataSource = series;
+    }
+}
+
+*******************************************************************************************************************
+
+	SQL
+
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.Data.SqlClient;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Entidades
+{
+    public static class AccesoDatos
+    {
+        private static SqlCommand comando;
+        private static SqlConnection conexion;
+
+        static AccesoDatos()
+        {
+            conexion = new SqlConnection(@"Data Source=.;Initial Catalog=20240701-SP;Integrated Security=True;Encrypt=False;");
+            comando = new SqlCommand();
+            comando.CommandType = System.Data.CommandType.Text;
+            comando.Connection = conexion;
+        }
+
+        public static void ActualizarSerie(Serie item)
+        {
+            try
+            {
+                comando.Parameters.Clear();
+                conexion.Open();
+                comando.CommandText = $"UPDATE dbo.series SET alumno = 'Rodrigo Ruiz' WHERE nombre = @Nombre";
+                comando.Parameters.AddWithValue("@Nombre", item.Nombre);
+                comando.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                BackLogException exception = new BackLogException("La serie no pudo actualizarse", ex);
+                Logger.Log(exception.Message);
+                throw exception;
+            }
+            finally
+            {
+                conexion.Close();
+            }
+        }
+        public static List<Serie> ObtenerBacklog()
+        {
+            List<Serie> listaSeries = new List<Serie>();
+
+            try
+            {
+                comando.Parameters.Clear();
+
+                conexion.Open();
+                comando.CommandText = "SELECT nombre, genero FROM dbo.series";
+
+                using (SqlDataReader reader = comando.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        Serie serieAux = new Serie(reader["nombre"].ToString(), reader["genero"].ToString());
+                        listaSeries.Add(serieAux);
+                    }
+                }
+                return listaSeries;
+            }
+            catch (Exception ex)
+            {
+                BackLogException exception = new BackLogException("No se pudo traer las series", ex);
+                Logger.Log(exception.Message);
+                throw exception;
+            }
+            finally
+            {
+                conexion.Close();
+            }
+        }
+    }
+}
+
+
+
+*******************************************************************************************************************
+	TEST UNITARIOS
+
+    [TestClass]
+    public class SerializacionTest
+    {
+        [TestMethod]
+        public void GuardarImplicito_CuandoGuardoUnArchivo_DeberiaCrearLaListaPasadaPorParametro()
+        {
+            List<Serie> series = new List<Serie>
+            {
+                new Serie("Rick y morty","Comedia"),
+                new Serie("The last of us","Drama"),
+            };
+            Serializadora serializadora = new Serializadora();
+            string nombreDelArchivo = "PruebaUnitaria.xml";
+            string rutaEscritorio = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), nombreDelArchivo);
+
+            serializadora.Guardar(series,rutaEscritorio);
+            bool valorEsperado = true;
+
+            bool resultado = File.Exists(rutaEscritorio);
+
+            Assert.AreEqual(valorEsperado, resultado);
+
+            File.Delete(rutaEscritorio);
+        }
+
+        [TestMethod]
+        public void GuardarExplicito_CuandoGuardoUnArchivo_DeberiaCrearLaListaPasadaPorParametro()
+        {
+            List<Serie> series = new List<Serie>
+            {
+                new Serie("Rick y morty","Comedia"),
+                new Serie("The last of us","Drama"),
+            };
+            Serializadora serializadora = new Serializadora();
+            string nombreDelArchivo = "PruebaUnitaria.json";
+            string rutaEscritorio = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), nombreDelArchivo);
+
+            ((IGuardar<List<Serie>>)serializadora).Guardar(series, rutaEscritorio);
+            bool valorEsperado = true;
+
+            bool resultado = File.Exists(rutaEscritorio);
+
+            Assert.AreEqual(valorEsperado, resultado);
+
+            File.Delete(rutaEscritorio);
+        }
+    }
