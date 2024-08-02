@@ -2,6 +2,14 @@
 ConectionString1 = "Server=.;Database=COMBATE_DB;Trusted_Connection=True;" 
 ConectionString2 = "Data Source=.;Initial Catalog=20240701-SP;Integrated Security=True;Encrypt=False;"
 
+
+Delegados
+Action retorna void y puede o no recibir parametros
+
+predicate retorna bool y recibe 1 parametro
+
+func retorna un valor y recibe parametros
+
 ************************************         SOBRECARGA    ********************************************************
 
 
