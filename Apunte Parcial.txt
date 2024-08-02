@@ -1,4 +1,53 @@
-	EXCEPCIONES
+
+ConectionString1 = "Server=.;Database=COMBATE_DB;Trusted_Connection=True;" 
+ConectionString2 = "Data Source=.;Initial Catalog=20240701-SP;Integrated Security=True;Encrypt=False;"
+
+************************************         SOBRECARGA    ********************************************************
+
+
+public override bool Equals(object obj)
+{
+    if (obj is Personaje otherPersonaje)
+    {
+        return this.id == otherPersonaje.id;
+    }
+    return false;
+}
+
+public override int GetHashCode()
+{
+    return id.GetHashCode();
+}
+
+public static bool operator ==(Personaje p1, Personaje p2)
+{
+    if (ReferenceEquals(p1, p2))
+    {
+        return true;
+    }
+    if (ReferenceEquals(p1, null) || ReferenceEquals(p2, null))
+    {
+        return false;
+    }
+    return p1.id == p2.id;
+}
+
+public static bool operator !=(Personaje p1, Personaje p2)
+{
+    return !(p1 == p2);
+}
+
+
+
+************************************         ENUMERADOS    ********************************************************
+public enum LadosMoneda
+{
+    Cara = 1,
+    Seca = 2
+}
+
+******************************************    EXCEPCIONES   **********************************************************************
+	
 
 public class BomberoOcupadoException : Exception
 {
@@ -21,8 +70,39 @@ public class BackLogException: Exception
     public BackLogException(string message,Exception inner) : base(message,inner) { }
 }
 
-*******************************************************************************************************************
-	METODOS DE EXTENSION
+namespace Entidades
+{
+    public class BusinessException:Exception
+    {
+        public BusinessException(string mensaje):base(mensaje)
+        {
+            
+        }
+
+        public BusinessException(string mensaje, Exception Inner):base(mensaje, Inner)
+        {
+                
+        }
+    }
+}
+
+			LANZAR EXCEPCION
+
+public Personaje(decimal id, string nombre, short nivel)
+{
+    if (string.IsNullOrWhiteSpace(nombre))
+    {
+        throw new ArgumentNullException(nameof(nombre), "El nombre no puede ser nulo ni estar vacío.");
+    }
+
+    if (nivel < 1 || nivel > 500)
+    {
+        throw new BusinessException("El nivel del personaje debe estar comprendido entre 1 y 500 puntos..");
+    }
+
+
+************************************************   METODOS DE EXTENSION   *******************************************************************
+	
 
 public static class ExtensoraRandom
 {
@@ -44,9 +124,9 @@ public interface IGuardar<T>
     void Guardar(T item, string ruta);
 }
 
-*******************************************************************************************************************
+**********************************    ARCHIVOS DE TEXTO    *********************************************************************************
 
-	ARCHIVOS DE TEXTO
+	
 
 public static class Logger
 {
@@ -80,9 +160,50 @@ public static class Logger
     }
 }
 
-*******************************************************************************************************************
 
-	HILOS Y EVENTOS
+
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Entidades
+{
+    public class Logger
+    {
+        private readonly string ruta;
+
+        // Constructor que recibe la ruta donde se almacenará el log
+        public Logger(string ruta)
+        {
+            this.ruta = ruta;
+        }
+
+        // Método que guarda el texto en el archivo del log sin sobrescribir el contenido
+        public void GuardarLog(string texto)
+        {
+            try
+            {
+                StringBuilder sb = new StringBuilder();
+                sb.AppendLine(texto);
+
+                File.AppendAllText(ruta, sb.ToString());
+            }
+            catch (Exception ex)
+            {
+                // Manejo básico de excepciones: podría registrarse en otro archivo de log de errores, mostrarse en la consola, etc.
+                Console.WriteLine($"Error al guardar el log: {ex.Message}");
+            }
+        }
+    }
+}
+
+
+******************************************   HILOS Y EVENTOS   *******************************************************************
+
+	
 
 public delegate void DelegadoBacklog(Serie serie);
 
@@ -116,10 +237,24 @@ public class ManejadorBacklog
     }
 }
 
+******************************************   FORMS   *******************************************************************
 
-*******************************************************************************************************************
 
-	InvoqueRequired
+DialogResult resultado = MessageBox.Show("¿Desea guardar los cambios?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+if (resultado == DialogResult.Yes)
+{
+    // El usuario hizo clic en "Sí"
+}
+else if (resultado == DialogResult.No)
+{
+    // El usuario hizo clic en "No"
+}
+
+
+******************************************   InvoqueRequired    *************************************************************************
+
+	
 
 private void OcultarBombero(int bomberoIndex)
 {
@@ -158,9 +293,9 @@ private void ActualizarListBox(ListBox lb, List<Serie> series)
     }
 }
 
-*******************************************************************************************************************
+*****************************************  SQL   **************************************************************************
 
-	SQL
+	
 
 using System;
 using System.Collections.Generic;
@@ -243,8 +378,76 @@ namespace Entidades
 
 
 
-*******************************************************************************************************************
-	TEST UNITARIOS
+
+••••••••••••••••••••••••••••••••••••••••   SQL OTRO   •••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••
+ 
+
+using System;
+using System.Collections.Generic;
+using System.Data.SqlClient;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace Entidades
+{
+    public static class PersonajeDAO
+    {
+        private static string connectionString = "Server=.;Database=COMBATE_DB;Trusted_Connection=True;";
+
+        public static Personaje ObtenerPersonajePorId(decimal id)
+        {
+            Personaje personaje = null;
+
+            try
+            {
+                using SqlConnection connection = new SqlConnection(connectionString);
+                connection.Open();
+                string query = "SELECT ID, NOMBRE, NIVEL, CLASE FROM PERSONAJES WHERE ID = @ID";
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    command.Parameters.AddWithValue("@ID", id);
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        if (reader.Read())
+                        {
+                            int personajeId = reader.GetInt32(0);
+                            string nombre = reader.GetString(1);
+                            short nivel = reader.GetInt16(2);     // NIVEL es short
+                            short clase = reader.GetInt16(3);
+
+                            switch (clase)
+                            {
+                                case 1:
+                                    personaje = new Guerrero(personajeId, nombre, nivel);
+                                    break;
+                                case 2:
+                                    personaje = new Hechicero(personajeId, nombre, nivel);
+                                    break;
+                                default:
+                                    break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Manejo de errores (podrías registrar el error o lanzar una excepción)
+                Console.WriteLine($"Error al obtener el personaje: {ex.Message}");
+                //throw new Exception("Error al obtener el personaje.", ex);
+            }
+
+            return personaje;
+        }
+    }
+}
+    
+
+
+
+***********************************TEST UNITARIOS********************************************************************************
+	
 
     [TestClass]
     public class SerializacionTest
@@ -293,3 +496,96 @@ namespace Entidades
             File.Delete(rutaEscritorio);
         }
     }
+
+
+
+using Entidades;
+
+namespace TestUnitarios
+{
+    [TestClass]
+    public class PersonajeTests
+    {
+        [TestMethod]
+        [ExpectedException(typeof(BusinessException))]
+        public void InstanciarPersonaje_NivelInvalido_DeberiaLanzarBusinessException()
+        {
+            // Arrange
+            decimal id = 1;
+            string nombre = "TestPersonaje";
+            short nivelInvalido = 501; // Nivel inválido, mayor a 500
+
+            // Act
+            Personaje personaje = new Guerrero(id, nombre, nivelInvalido);
+
+            // Assert se realiza mediante el atributo [ExpectedException]
+        }
+
+        [TestMethod]
+        public void RecibirAtaque_PuntosDeVidaNoDeberianSerNegativos()
+        {
+            // Arrange
+            decimal id = 1;
+            string nombre = "TestPersonaje";
+            short nivel = 10;
+            Personaje personaje = new Guerrero(id, nombre, nivel);
+            int ataqueMuyFuerte = personaje.PuntosDeVida + 1000; // Un ataque mayor que los puntos de vida del personaje
+
+            // Act
+            personaje.RecibirAtaque(ataqueMuyFuerte);
+
+            // Assert
+            Assert.AreEqual(0, personaje.PuntosDeVida);
+        }
+
+        [TestMethod]
+        public void InstanciarGuerrero_PuntosDeDefensaDeberianSerCorrectos()
+        {
+            // Arrange
+            decimal id = 1;
+            string nombre = "TestGuerrero";
+            short nivel = 1;
+
+            // Act
+            Personaje guerrero = new Guerrero(id, nombre, nivel);
+
+            // Assert
+            Assert.AreEqual(100, guerrero.PuntosDeDefensa);
+        }
+
+        [TestMethod]
+        public void InstanciarHechicero_PuntosDeDefensaDeberianSerCorrectos()
+        {
+            // Arrange
+            decimal id = 2;
+            string nombre = "TestHechicero";
+            short nivel = 1;
+
+            // Act
+            Personaje hechicero = new Hechicero(id, nombre, nivel);
+
+            // Assert
+            Assert.AreEqual(100, hechicero.PuntosDeDefensa);
+        }
+    }
+}
+
+**********************************SERIALIZAR*********************************************************************************
+
+public static class Serializadora<T>
+{
+    // Método estático para guardar en XML
+    public static void GuardarXml(T item, string ruta)
+    {
+        using StreamWriter streamWriter = new StreamWriter(ruta);
+        XmlSerializer xmlSerializer = new XmlSerializer(typeof(T));
+        xmlSerializer.Serialize(streamWriter, item);
+    }
+
+    // Método estático para guardar en JSON
+    public static void GuardarJson(T item, string ruta)
+    {
+        string jsonString = JsonSerializer.Serialize(item);
+        File.WriteAllText(ruta, jsonString);
+    }
+}
